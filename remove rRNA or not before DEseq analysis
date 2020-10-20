@@ -1,0 +1,198 @@
+https://www.biostars.org/p/130420/
+
+
+
+https://www.cnblogs.com/Chiachyi/p/11324948.html
+
+
+选用DNA RM 还是DNA SM
+Posted on 2019-08-09 08:37  Chiachyi  阅读(577)  评论(0)  编辑  收藏
+本文转载自嘉因微信公众号，已获得授权。查看最新文章，敬请关注嘉因，微信ID：rainbow-genome
+
+作者：小哈  来源：嘉因
+
+大家都会做方便面，有人做辛拉面，有人做三鲜伊面，工艺有何不同？
+
+ 
+
+大家都会做RNA-seq，有人能筛出有意义的基因，有人能找出有价值的线索，有人。。。差别在哪？
+
+ 
+
+前五期介绍了回帖、均一化处理、差异基因筛选、画heatmap和富集分析的合理方法：
+
+ 
+
+第五期：gene model：同样算read counts，为什么公司跟师兄算的结果不一样？| Ensembl、UCSC、Refseq，该用哪个
+
+ 
+
+第一期：数据预处理：同一套RNA-seq，为什么公司做的跟师兄跑的结果不一样？ | TPM、read counts、RPKM/FPKM你选对了吗？
+
+ 
+
+第二期：差异基因筛选：同一套RNA-seq，公司筛出的差异基因跟师兄筛出的为什么不一样？| Pvalue, FDR, cutoff
+
+ 
+
+第三期：heatmap：heatmap画不好会得出错误结论 | 数据预处理、聚类分析，HCL、 K means里的讲究
+
+ 
+
+第四期：富集分析：富集分析，俩人做的结果差5岁 | 你用的注释文件有多老？
+
+ 
+
+本文先解决去除rRNA的RNA-seq问题，后面谈ensembl基因组使用的注意事项。
+
+ 
+
+ 
+
+实验和分析去除rRNA
+
+ 
+
+通常做lncRNA-seq时会用到特殊的建库方式，去除rRNA，而不是抓polyA尾巴，这样可以看到不带polyA尾巴的lncRNA。
+
+
+
+
+第五期说Ensembl的基因注释最准确，基因最全；
+
+ 
+
+好！我用Ensembl的GTF做mapping；
+
+ 
+
+ 
+
+第一期说衡量基因的丰度要用TPM；
+
+ 
+
+好！我用TPM排序，看看哪个基因表达丰度最高。
+
+ 
+
+ 
+
+Q：晕！怎么这么多rRNA ！？哥花了大价钱买kit去除rRNA，怎么测序还是测到这么多rRNA？！
+
+ 
+
+
+
+A：淡定！通常实验去除rRNA，还是会剩0.1-10%的rRNA。
+
+ 
+
+sample间rRNA去除效率不同，剩下那些rRNA的read count会影响TPM的计算。因此，在mapping前，先删掉GTF文件里的rRNA。ensembl的GTF有一列专门标注了gene biotype，用“grep -v rRNA”一条命令搞定。
+
+ 
+
+用删掉rRNA的GTF做mapping，不影响rRNA mapping到genome，也就是不影响回帖率；只是在算TPM的时候，不把rRNA的read counts算在内。这样就不会因为rRNA去除效率的差异而影响其他基因丰度的计算。
+
+ 
+
+看看用删掉rRNA的GTF文件做mapping后，Top 10的基因是谁吧！
+
+
+
+晕！怎么最多的还是无聊的snRNA？
+
+ 
+
+Q：我想把snRNA、snoRNA也删掉！Ensembl的GTF gene biotype有这么多种ncRNA。只留下lincRNA，其余的都删掉多清净？
+
+
+
+
+A：不能删！
+
+ 
+
+tRNA（76-90 nt）、scRNA（100 nt）、miRNA（22 nt）因为长度太短捞不到，所以read counts很低，影响不到TPM的计算。剩下的snoRNA、snRNA，你确定它们在group间没有差异表达？也许他们也有着重要的功能，在你的处理条件或组织类型里表达量提高或被抑制，从而发挥了调控作用，或被调控。
+
+ 
+
+
+
+
+所以，如果rRNA去除效率差异太大，删掉GTF文件里的rRNA就好。其实，通常也不需要这样处理，rRNA read count的差异对DESeq2和edgeR结果不会影响很大。
+
+ 
+
+ 
+
+关于GTF里gene biotype的处理，没有找到文献支持，只有comment，例如：
+
+ 
+
+https://www.biostars.org/p/130420/
+
+
+
+https://www.biostars.org/p/106590/
+
+
+
+ 
+
+ 
+
+ 
+
+ 
+
+Ensembl基因组使用注意事项
+
+ 
+
+Q：我又想到一个办法：rRNA通常是repeat，ensembl有三种fasta文件，其中dna_rm的fasta文件已经将repeat变成N，所以，rRNA的read就无法mapping回去，这是个好主意吗？
+
+ 
+
+
+
+A：推荐dna或dna_sm版本的fasta文件，不要用dna_rm。点击左下角“阅读原文”直达原贴
+
+
+
+ 
+
+ 
+
+Q：同样是dna或dna_sm，又有Primary assembly和toplevel，该选哪个？
+
+ 
+
+A：通常推荐Primary assembly。因为Primary assembly去掉了toplevel当中的单倍体和patch，它们会干扰分析结果。
+
+ 
+
+
+
+
+Q：我只想要chr1-22和X、Y，那些单个chromosome文件是primary assembly？还是toplevel？
+
+ 
+
+A：是Toplevel。所以，还是用primary assembly吧。
+
+ 
+
+
+
+
+如果你不想要scaffolds，可以提取primary assembly文件里的chromosome。不过，不建议这样做，因为那些scaffolds上面还有300多个基因。
+
+
+
+
+Q：ensembl的版本号更新太频繁，我需要每次mapping都下载最新版本吗？
+
+ 
+
+A：对于基因组成熟的物种，例如人和小鼠等模式生物，最近版本间差异不大，hg19、hg38和mm9、mm10对应的版本都可以。这取决于你想要一起分析的数据用的是哪个基因组版本。ENCODE项目最新版本都用hg38和mm10了。不过geo上的大多数数据都是hg19和mm9的。用liftover转换基因组版本，简单快捷，但会损失信息。实在不行，就把公共数据用最新版本重新跑一下。
