@@ -1,0 +1,12 @@
+#!/bin/bash
+
+for n in '1' '2' '3' '4' '5' '6' '7' '8' '9' '10' '11' '12' '13' '14' '15'
+
+do
+
+
+STAR --runThreadN 4 --genomeDir /home/xu/2020_S_cerevisiae_RNAseq/XU_reanalyzed/STAR/genomeindex_R64-1-1_index --readFilesCommand zcat  --readFilesIn /home/xu/2020_S_cerevisiae_RNAseq/Raw_data/mut"$n"_1.fq.gz /home/xu/2020_S_cerevisiae_RNAseq/Raw_data/mut"$n"_2.fq.gz --outFilterType BySJout --outFilterMultimapNmax 20 --alignSJoverhangMin 8 --alignSJDBoverhangMin 1 --outFilterMismatchNmax 999 --outFilterMismatchNoverReadLmax 0.04 --alignIntronMin 5 --limitBAMsortRAM 1946212406 –sjdbGTFfile /home/xu/2020_S_cerevisiae_RNAseq/XU_reanalyzed/STAR/Saccharomyces_cerevisiae.R64-1-1.101.gtf --quantMode GeneCounts --outSAMtype BAM SortedByCoordinate --outFileNamePrefix /home/xu/2020_S_cerevisiae_RNAseq/XU_reanalyzed/STAR/mapping/mut"$n"
+
+STAR --runThreadN 4 --genomeDir /home/xu/2020_S_cerevisiae_RNAseq/XU_reanalyzed/STAR/genomeindex_R64-1-1_index --readFilesCommand zcat  --readFilesIn /home/xu/2020_S_cerevisiae_RNAseq/Raw_data/wt"$n"_1.fq.gz /home/xu/2020_S_cerevisiae_RNAseq/Raw_data/wt"$n"_2.fq.gz --outFilterType BySJout --outFilterMultimapNmax 20 --alignSJoverhangMin 8 --alignSJDBoverhangMin 1 --outFilterMismatchNmax 999 --outFilterMismatchNoverReadLmax 0.04 --alignIntronMin 5 --limitBAMsortRAM 1946212406 –sjdbGTFfile /home/xu/2020_S_cerevisiae_RNAseq/XU_reanalyzed/STAR/Saccharomyces_cerevisiae.R64-1-1.101.gtf --quantMode GeneCounts --outSAMtype BAM SortedByCoordinate --outFileNamePrefix /home/xu/2020_S_cerevisiae_RNAseq/XU_reanalyzed/STAR/mapping/wt"$n"
+
+done
