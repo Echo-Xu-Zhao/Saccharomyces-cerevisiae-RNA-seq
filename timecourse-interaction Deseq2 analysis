@@ -1,0 +1,39 @@
+library(DESeq2)
+countData_ko1234 <- read.delim("C:/Bioinformatics/2019_mettl4_rnaseq/countData_ko1234.txt", header=TRUE)
+head.DataTable(countData_ko1234)
+
+#set the first row as header, same as header=TRUE
+rownames(countData_ko1234)<-countData_ko1234[,1]
+
+#remove x in the first column
+countData_ko1234<-countData_ko1234[,-1]
+
+head.DataTable(countData_ko1234)
+
+condition <- factor(c(rep("wt",2),rep("ko",2)), levels = c("wt","ko")) 
+#factor and levels should use the same name
+#condition <- factor(c("wt","wt","KO","KO"))
+condition #view condition
+
+colData <- data.frame(row.names=colnames(countData_ko1234), condition)
+colData
+
+#build dds DESeqDataSet object
+dds <- DESeqDataSetFromMatrix(countData_ko1234, DataFrame(condition), design= ~ condition ) # add one more factor for design like: = ~ type + condition
+dds <- DESeq(dds)
+dds #view dds
+
+res= results(dds)
+res = res[order(res$pvalue),]
+head(res)
+summary(res)
+res2<-subset(res)
+
+# boxplot(dds["GeneName",]) # To visulize a specified gene expression and variation in a boxplot
+#hist(res$pvalue, breads=100) # Histogram of distribution of genes with pvalues, alternative to ggplot
+
+#diff_gene_deseq2 <-subset(res, padj < 0.05 & abs(log2FoldChange) > 0.5)
+## diff_gene_deseq2 <-subset(res,padj < 0.05 & (log2FoldChange > 1 | log2FoldChange < -1))
+#dim(diff_gene_deseq2)
+#head(diff_gene_deseq2)
+#write.csv(diff_gene_deseq2,file= "DEG_countsForDEseq23.csv")
