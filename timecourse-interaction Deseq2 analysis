@@ -1,142 +1,149 @@
-library(DESeq2)
-input <- read.delim("count_matrix.txt", header=TRUE, sep = "\t")
-head(input)
-
-#set the first row as header, same as header=TRUE
-rownames(input)<-input[,1]
-#remove x in the first column
-input<-input[,-1]
-head(input)
-
-Time = rep(c("Time1", "Time2", "Time3", "Time4", "Time5"), each = 3)
-Strain = rep(c("PC8", "PC11"), each = 15)
-nameD <- paste(Strain, Time, c(rep(LETTERS[1:3], 5), rep(LETTERS[1:3], 5)), sep = "_")
-coldata <- data.frame(row.names = nameD, Time = Time, Strain = Strain)
-coldata
-
-colnames(input)<-row.names(coldata)
-
-condition <- factor(rep(c("PC8_Time1", "PC8_Time2", "PC8_Time3", "PC8_Time4","PC8_Time5","PC11_Time1", "PC11_Time2", "PC11_Time3", "PC11_Time4","PC11_Time5"),each=3),
-                    levels=c("PC8_Time1", "PC8_Time2", "PC8_Time3", "PC8_Time4","PC8_Time5","PC11_Time1", "PC11_Time2", "PC11_Time3", "PC11_Time4","PC11_Time5"))
-condition
-
-#build dds DESeqDataSet object
-dds <- DESeqDataSetFromMatrix(countData=input, colData = coldata, design= ~ Time + Strain + Time:Strain) # design= ~ batch + condition, #Aboutn the warning message, We don’t actually need to pass DESeq2 the model matrix, instead we pass it the design formula and the sampleinfo it will build the matrix itself.
-#pre-filter the dataset
-nrow(dds)
-dds <- dds[ rowSums(counts(dds)) > 1, ] ## remove rows of the dds that have no counts, or only a single count across all samples
-nrow(dds)
-# keep <- rowSums(counts(dds) >= 10) >= 3 ## at least 3 samples with a count of 10 or higher
-#dds <- dds[keep,]
-
-dds <- DESeq(dds, test="LRT", reduced = ~ Time + Strain)
-dds
-
-######### extracting normalized counts, this is only for visualization
-## Option1. divide each column of counts(dds) by sizeFactors(dds), only library size normalized
-dds <- estimateSizeFactors(dds)
-normalized_counts <- counts(dds, normalized=TRUE)
-write.table(normalized_counts, file="DEseq2_normalizedCounts.txt", sep = "\t")
-## Option2. transformed in either vsd or log transformed rld
-vsd <- vst(dds, blind=FALSE) # recommonded
-# rld <- rlog(dds, blind=FALSE)
-head(assay(vsd), 3)
-write.table(vsd, file="DEseq2_vsd_Counts.txt", sep = "\t")
-##PCA plot
-library(ggplot2)
-pcaData <- plotPCA(vsd, intgroup=c("Strain", "Time"), returnData=TRUE)
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=Strain, shape=Time)) +
-  geom_point(size=3) +
-  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-  coord_fixed() +
-  theme(aspect.ratio=1,
-        axis.text = element_text(size=12, colour = "black"),
-        axis.title = element_text(size=12, colour = "black"),
-        legend.text = element_text(size=12, colour = "black"),
-        legend.title = element_text(size=12, colour = "black")
-        )
-
-## heatmap of the sample distances
-sampleDists <- dist(t(assay(vsd)))
-library("RColorBrewer")
-library(pheatmap)
-sampleDistMatrix <- as.matrix(sampleDists)
-rownames(sampleDistMatrix) <- paste(vsd$condition, vsd$type, sep="-")
-colnames(sampleDistMatrix) <- NULL
-colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
-pheatmap(sampleDistMatrix,
-         clustering_distance_rows=sampleDists,
-         clustering_distance_cols=sampleDists,
-         col=colors)
-
-### printout the interaction result, without specifying, results() will print out the last comparison in the resultsNames(dds)
-res= results(dds, test="Wald")
-res = res[order(res$padj),]
-head(res)
-summary(res)
-write.table(res, file="PC8vsPC11_timecourse_DEGs.txt", sep = "\t")
-
-##It is more useful visualize the MA-plot for the shrunken log2 fold changes,
-##which remove the noise associated with log2 fold changes from low count genes without requiring arbitrary filtering thresholds.
-resLFC <- lfcShrink(dds, coef=2, type="apeglm") # type: apeglm, normal, ashr; coef= number, number is the order that it appears in resultsNames(dds)
-resLFC
-plotMA(resLFC, ylim=c(-2,2))
-
-## summary of the interaction events
-resultsNames(dds)
-
-### To generate the tables of log fold change of mut vs wt at individual time point, after normaliztion to the first timepoint
-res_individual_interaction <- results(dds, name="TimeTime5.StrainPC8", test="Wald")
-res_individual_interaction = res_individual_interaction[order(res_individual_interaction$padj),]
-write.table(res_individual_interaction, file="PC8vsPC11_Time180_DEGs.txt", sep = "\t")
-        
-### To generate the tables of log fold change of 60 minutes vs 0 minutes for the WT strain would be
-res_wt <- results(dds, name = "Time_Time5_vs_Time1", test = "Wald")
-res_wt[which.min(res_wt$padj),]
-res_wt = res_wt[order(res_wt$padj),]
-write.table(res_wt, file="PC11_Time180vsTime0_DEGs.txt", sep = "\t")
-
-### To generate the tables of log fold change of 60 minutes vs 0 minutes for the mut strain, 
-### it would be the sum of the WT term above and the interaction term which is an additional effect beyond the effect for the reference level (WT):
-res_mut <- results(dds, contrast=list(c("Time_Time5_vs_Time1","TimeTime5.StrainPC8")))
-res_mut[which.min(res_mut$padj),]
-res_mut = res_mut[order(res_mut$padj),]
-write.table(res_mut, file="PC8_Time180vsTime0_DE.txt", sep = "\t")
-
-### To generate the table for log fold change of mut vs wt at the first timepoint
-res_0 <- results(dds, name = "Strain_PC8_vs_PC11", test = "Wald")
-res_0 = res_0[order(res_0$padj),]
-res_0[which.min(res_0$padj),]
-write.table(res_0, file="PC8_vs_PC11_Time0_DEGs.txt", sep = "\t")
-
-#### Normalized counts for a gene with condition-specific changes over time.
-library(ggplot2)
-yeast <- plotCounts(dds, which.min(res$padj), 
-                    intgroup = c("Time","Strain"), returnData = TRUE)
-ggplot(yeast,
-       aes(x = as.numeric(Time), y = count, color = Strain, group = Strain)) + 
-  geom_point() + geom_smooth(se = FALSE, method = "loess") + scale_y_log10()
-
-## We can furthermore cluster significant genes by their profiles. 
-## We extract a matrix of the shrunken log2 fold changes using the coef function:
-betas <- coef(dds)
-colnames(betas)
-betas= results(betas, test="Wald")
-betas = betas[order(betas$padj),]
-head(betas)
-summary(betas)
-
-library(pheatmap)
-topGenes <- head(order(res$padj),50)
-mat <- betas[topGenes, -c(1,2)]
-thr <- 3 
-mat[mat < -thr] <- -thr
-mat[mat > thr] <- thr
-pheatmap(mat, breaks = seq(from = -thr, to = thr, length = 101),
-         cluster_col = FALSE)
-
-devtools::session_info()
-
-sessionInfo()
+  library(DESeq2)
+  input <- read.delim("count_matrix.txt", header=TRUE, sep = "\t")
+  head(input)
+  
+  #set the first row as header, same as header=TRUE
+  rownames(input)<-input[,1]
+  #remove x in the first column
+  input<-input[,-1]
+  head(input)
+  
+  Time = rep(c("Time1", "Time2", "Time3", "Time4", "Time5"), each = 3)
+  Strain = rep(c("PC8", "PC11"), each = 15)
+  nameD <- paste(Strain, Time, c(rep(LETTERS[1:3], 5), rep(LETTERS[1:3], 5)), sep = "_")
+  coldata <- data.frame(row.names = nameD, Time = Time, Strain = Strain)
+  coldata
+  
+  colnames(input)<-row.names(coldata)
+  
+  condition <- factor(rep(c("PC8_Time1", "PC8_Time2", "PC8_Time3", "PC8_Time4","PC8_Time5","PC11_Time1", "PC11_Time2", "PC11_Time3", "PC11_Time4","PC11_Time5"),each=3),
+                      levels=c("PC8_Time1", "PC8_Time2", "PC8_Time3", "PC8_Time4","PC8_Time5","PC11_Time1", "PC11_Time2", "PC11_Time3", "PC11_Time4","PC11_Time5"))
+  condition
+  
+  #build dds DESeqDataSet object
+  dds <- DESeqDataSetFromMatrix(countData=input, colData = coldata, design= ~ Time + Strain + Time:Strain) # design= ~ batch + condition, #Aboutn the warning message, We don’t actually need to pass DESeq2 the model matrix, instead we pass it the design formula and the sampleinfo it will build the matrix itself.
+  dds$Time
+  dds$Strain
+    # relevel the condition, change the level or reference
+    #dds$Time = relevel( dds$Time, "Time1")
+    #dds$Time
+  
+  #pre-filter the dataset
+  #nrow(dds)
+  #dds <- dds[ rowSums(counts(dds)) > 1, ] ## remove rows of the dds that have no counts, or only a single count across all samples
+  #nrow(dds)
+  # keep <- rowSums(counts(dds) >= 10) >= 3 ## at least 3 samples with a count of 10 or higher
+  #dds <- dds[keep,]
+  
+  dds <- DESeq(dds, test="LRT", reduced = ~ Time + Strain)
+  dds
+  
+  ######### extracting normalized counts, this is only for visualization
+  ## Option1. divide each column of counts(dds) by sizeFactors(dds), only library size normalized
+    dds <- estimateSizeFactors(dds)
+    normalized_counts <- counts(dds, normalized=TRUE)
+    write.table(normalized_counts, file="DEseq2_normalizedCounts.txt", sep = "\t")
+  ## Option2. transformed in either vsd or log transformed rld
+  vsd <- vst(dds, blind=FALSE) # recommonded
+  # rld <- rlog(dds, blind=FALSE)
+  head(assay(vsd), 3)
+  write.table(vsd, file="DEseq2_vsd_Counts.txt", sep = "\t")
+  ##PCA plot
+  library(ggplot2)
+  pcaData <- plotPCA(vsd, intgroup=c("Strain", "Time"), returnData=TRUE)
+  percentVar <- round(100 * attr(pcaData, "percentVar"))
+  ggplot(pcaData, aes(PC1, PC2, color=Strain, shape=Time)) +
+    geom_point(size=3) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+    coord_fixed() +
+    theme(aspect.ratio=1,
+          axis.text = element_text(size=12, colour = "black"),
+          axis.title = element_text(size=12, colour = "black"),
+          legend.text = element_text(size=12, colour = "black"),
+          legend.title = element_text(size=12, colour = "black")
+          )
+  
+  ## heatmap of the sample distances
+  sampleDists <- dist(t(assay(vsd)))
+  library("RColorBrewer")
+  library(pheatmap)
+  sampleDistMatrix <- as.matrix(sampleDists)
+  rownames(sampleDistMatrix) <- paste(vsd$condition, vsd$type, sep="-")
+  colnames(sampleDistMatrix) <- NULL
+  colors <- colorRampPalette( rev(brewer.pal(9, "Blues")) )(255)
+  pheatmap(sampleDistMatrix,
+           clustering_distance_rows=sampleDists,
+           clustering_distance_cols=sampleDists,
+           col=colors)
+  
+  ### printout the interaction result, without specifying, results() will print out the last comparison in the resultsNames(dds)
+      res= results(dds)
+      res = res[order(res$padj),]
+      head(res)
+      summary(res)
+  write.table(res, file="PC8vsPC11_timecourse_DEGs.txt", sep = "\t")
+  
+  ##It is more useful visualize the MA-plot for the shrunken log2 fold changes,
+  ##which remove the noise associated with log2 fold changes from low count genes without requiring arbitrary filtering thresholds.
+  resLFC <- lfcShrink(dds, coef=2, type="apeglm", lfcThreshold=1) # type: apeglm, normal, ashr; coef= number, number is the order that it appears in resultsNames(dds)
+  resLFC
+  plotMA(resLFC, ylim=c(-2,2))
+  abline(h=c(-1,1), col="dodgerblue", lwd=2)
+  
+  ## summary of the interaction events
+  resultsNames(dds) ## for example, name="Strain_PC8_vs_PC11" or equivalently contrast=c("Strain","PC8","PC11") gives you the PC8 vs PC11 difference at time=0.
+  
+  ### To generate the tables of log fold change of mut vs wt at individual time point, after normaliztion to the first timepoint
+  res_individual_interaction <- results(dds, name="TimeTime2.StrainPC8", test="Wald")
+  res_individual_interaction = res_individual_interaction[order(res_individual_interaction$padj),]
+  write.table(res_individual_interaction, file="PC8vsPC11_Time30_DEGs.txt", sep = "\t")
+          
+  ### To generate the tables of log fold change of 60 minutes vs 0 minutes for the WT strain would be
+  res_wt <- results(dds, name = "Time_Time2_vs_Time1", test = "Wald")
+  res_wt[which.min(res_wt$padj),]
+  res_wt = res_wt[order(res_wt$padj),]
+  write.table(res_wt, file="PC11_Time30vsTime0_DEGs.txt", sep = "\t")
+  
+  ### To generate the tables of log fold change of 60 minutes vs 0 minutes for the mut strain, 
+  ### it would be the sum of the WT term above and the interaction term which is an additional effect beyond the effect for the reference level (WT):
+    res_mut <- results(dds, contrast=list(c("Time_Time2_vs_Time1","TimeTime2.StrainPC8")), test = "Wald")
+    res_mut[which.min(res_mut$padj),]
+    res_mut = res_mut[order(res_mut$padj),]
+    write.table(res_mut, file="PC8_Time30vsTime0_DE.txt", sep = "\t")
+  
+    ### To generate the table for log fold change of mut vs wt at the first timepoint
+  res_0 <- results(dds, name = "Strain_PC8_vs_PC11", test = "Wald")
+  res_0 = res_0[order(res_0$padj),]
+  res_0[which.min(res_0$padj),]
+  write.table(res_0, file="PC8_vs_PC11_Time0_DEGs.txt", sep = "\t")
+  
+  #### Normalized counts for a gene with condition-specific changes over time.
+  library(ggplot2)
+  yeast <- plotCounts(dds, which.min(res$padj), 
+                      intgroup = c("Time","Strain"), returnData = TRUE)
+  ggplot(yeast,
+         aes(x = as.numeric(Time), y = count, color = Strain, group = Strain)) + 
+    geom_point() + geom_smooth(se = FALSE, method = "loess") + scale_y_log10()
+  
+  ## We can furthermore cluster significant genes by their profiles. 
+  ## We extract a matrix of the shrunken log2 fold changes using the coef function:
+  betas <- coef(dds)
+  colnames(betas)
+  betas= results(betas, test="Wald")
+  betas = betas[order(betas$padj),]
+  head(betas)
+  summary(betas)
+  
+  library(pheatmap)
+  topGenes <- head(order(res$padj),50)
+  mat <- betas[topGenes, -c(1,2)]
+  thr <- 3 
+  mat[mat < -thr] <- -thr
+  mat[mat > thr] <- thr
+  pheatmap(mat, breaks = seq(from = -thr, to = thr, length = 101),
+           cluster_col = FALSE)
+  
+  devtools::session_info()
+  
+  sessionInfo()
